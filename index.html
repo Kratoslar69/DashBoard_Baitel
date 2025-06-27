@@ -484,6 +484,19 @@
             display: none;
         }
         
+        .badge {
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .badge-nivel1 { background: #636e72; }
+        .badge-nivel2 { background: #fdcb6e; color: #2d3436; }
+        .badge-nivel3 { background: #00b894; }
+        .badge-nivel4 { background: #e17055; }
+        
         @media (max-width: 768px) {
             .upload-container {
                 grid-template-columns: 1fr;
@@ -663,7 +676,7 @@
     </div>
 
     <script>
-        // Configuración Enterprise
+        // Configuración Enterprise - ACTUALIZADA PARA POST
         const CONFIG = {
             API_BASE_URL: 'https://devwebhookn8n.m4metadryve.mx/webhook',
             UPLOAD_ENDPOINT: '/upload-excel',
@@ -710,7 +723,13 @@
         }
         
         async function testAPIConnection() {
-            const response = await fetch(`${CONFIG.API_BASE_URL}${CONFIG.METRICS_ENDPOINT}?test=true`);
+            const response = await fetch(`${CONFIG.API_BASE_URL}${CONFIG.METRICS_ENDPOINT}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ action: 'test_connection' })
+            });
             if (!response.ok) throw new Error('API no disponible');
             return response.json();
         }
@@ -780,10 +799,27 @@
                     }
                 }
                 
-                const response = await fetch(`${CONFIG.API_BASE_URL}${CONFIG.METRICS_ENDPOINT}`);
-                if (!response.ok) throw new Error('Error en API de métricas');
+                console.log('📡 Enviando request POST a métricas...');
+                
+                const response = await fetch(`${CONFIG.API_BASE_URL}${CONFIG.METRICS_ENDPOINT}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Origin': 'https://kratoslar69.github.io'
+                    },
+                    body: JSON.stringify({
+                        action: 'get_metrics',
+                        filters: AppState.filters,
+                        timestamp: new Date().toISOString()
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
                 
                 const data = await response.json();
+                console.log('✅ Métricas recibidas:', data);
                 
                 // Guardar en cache
                 AppState.cache.set(cacheKey, {
@@ -798,7 +834,8 @@
                 return data;
                 
             } catch (error) {
-                console.error('Error cargando métricas:', error);
+                console.error('❌ Error cargando métricas:', error);
+                showAlert(`Error en métricas: ${error.message}`, 'error');
                 throw error;
             }
         }
@@ -824,18 +861,33 @@
             const startTime = performance.now();
             
             try {
-                const params = new URLSearchParams({
+                console.log('📡 Enviando request POST a comisiones...');
+                
+                const requestBody = {
+                    action: 'get_commissions',
                     page: page,
                     limit: CONFIG.BATCH_SIZE,
                     order_by: AppState.sorting.orderBy,
                     direction: AppState.sorting.direction,
-                    ...AppState.filters
+                    ...AppState.filters,
+                    timestamp: new Date().toISOString()
+                };
+                
+                const response = await fetch(`${CONFIG.API_BASE_URL}${CONFIG.COMMISSIONS_ENDPOINT}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Origin': 'https://kratoslar69.github.io'
+                    },
+                    body: JSON.stringify(requestBody)
                 });
                 
-                const response = await fetch(`${CONFIG.API_BASE_URL}${CONFIG.COMMISSIONS_ENDPOINT}?${params}`);
-                if (!response.ok) throw new Error('Error en API de comisiones');
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
                 
                 const data = await response.json();
+                console.log('✅ Comisiones recibidas:', data);
                 
                 AppState.currentPage = data.pagination.currentPage;
                 AppState.totalPages = data.pagination.totalPages;
@@ -849,7 +901,8 @@
                 return data;
                 
             } catch (error) {
-                console.error('Error cargando comisiones:', error);
+                console.error('❌ Error cargando comisiones:', error);
+                showAlert(`Error en comisiones: ${error.message}`, 'error');
                 throw error;
             }
         }
@@ -1414,1011 +1467,6 @@
         });
         observer.observe({type: 'navigation', buffered: true});
         
-    </script>
-    
-    <style>
-        .badge {
-            padding: 4px 8px;
-            border-radius: 6px;
-            font-size: 0.8rem;
-            font-weight: 600;
-            text-transform: uppercase;
-        }
-        
-        .badge-nivel1 { background: #636e72; }
-        .badge-nivel2 { background: #fdcb6e; color: #2d3436; }
-        .badge-nivel3 { background: #00b894; }
-        .badge-nivel4 { background: #e17055; }
-        
-        /* Animaciones adicionales */
-        @keyframes dataUpdate {
-            0% { background-color: rgba(116, 185, 255, 0.2); }
-            100% { background-color: transparent; }
-        }
-        
-        .data-updated {
-            animation: dataUpdate 1s ease-out;
-        }
-        
-        /* Responsive adicional */
-        @media (max-width: 480px) {
-            .table-controls {
-                flex-direction: column;
-                gap: 10px;
-            }
-            
-            .search-box, .filter-select {
-                width: 100%;
-            }
-            
-            .data-table th, .data-table td {
-                padding: 8px;
-                font-size: 0.8rem;
-            }
-        }
-    </style>
-</body>
-</html><!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard de Comisiones y Ventas</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
-        
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 20px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            overflow: hidden;
-        }
-        
-        .header {
-            background: linear-gradient(135deg, #2c3e50, #4a6cf7);
-            color: white;
-            padding: 30px;
-            text-align: center;
-        }
-        
-        .header h1 {
-            font-size: 2.5rem;
-            margin-bottom: 10px;
-            font-weight: 700;
-        }
-        
-        .header p {
-            opacity: 0.9;
-            font-size: 1.1rem;
-        }
-        
-        .upload-section {
-            padding: 30px;
-            background: #f8f9ff;
-            border-bottom: 1px solid #e0e6ed;
-        }
-        
-        .upload-container {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-            margin-bottom: 20px;
-        }
-        
-        .upload-box {
-            border: 3px dashed #4a6cf7;
-            border-radius: 15px;
-            padding: 30px;
-            text-align: center;
-            background: white;
-            transition: all 0.3s ease;
-            cursor: pointer;
-        }
-        
-        .upload-box:hover {
-            border-color: #2c3e50;
-            background: #f0f4ff;
-        }
-        
-        .upload-box.loaded {
-            border-color: #28a745;
-            background: #f8fff8;
-        }
-        
-        .upload-icon {
-            font-size: 3rem;
-            margin-bottom: 15px;
-            color: #4a6cf7;
-        }
-        
-        .upload-box.loaded .upload-icon {
-            color: #28a745;
-        }
-        
-        input[type="file"] {
-            display: none;
-        }
-        
-        .btn {
-            background: linear-gradient(135deg, #4a6cf7, #2c3e50);
-            color: white;
-            border: none;
-            padding: 15px 30px;
-            border-radius: 10px;
-            cursor: pointer;
-            font-size: 1rem;
-            font-weight: 600;
-            transition: all 0.3s ease;
-        }
-        
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(74, 108, 247, 0.3);
-        }
-        
-        .btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
-        }
-        
-        .main-content {
-            padding: 40px;
-        }
-        
-        .metrics-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 25px;
-            margin-bottom: 40px;
-        }
-        
-        .metric-card {
-            background: white;
-            padding: 25px;
-            border-radius: 15px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-            border-left: 5px solid #4a6cf7;
-            transition: all 0.3s ease;
-        }
-        
-        .metric-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 15px 35px rgba(0,0,0,0.15);
-        }
-        
-        .metric-value {
-            font-size: 2.5rem;
-            font-weight: 700;
-            color: #2c3e50;
-            margin-bottom: 10px;
-        }
-        
-        .metric-label {
-            color: #666;
-            font-size: 1rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-        
-        .charts-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 30px;
-            margin-bottom: 40px;
-        }
-        
-        .chart-container {
-            background: white;
-            padding: 30px;
-            border-radius: 15px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-        }
-        
-        .chart-title {
-            font-size: 1.3rem;
-            font-weight: 600;
-            color: #2c3e50;
-            margin-bottom: 20px;
-            text-align: center;
-        }
-        
-        .full-width {
-            grid-column: 1 / -1;
-        }
-        
-        .filters {
-            background: white;
-            padding: 20px;
-            border-radius: 15px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-            margin-bottom: 30px;
-            display: flex;
-            gap: 20px;
-            flex-wrap: wrap;
-            align-items: center;
-        }
-        
-        .filter-group {
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-        }
-        
-        .filter-group label {
-            font-weight: 600;
-            color: #2c3e50;
-            font-size: 0.9rem;
-        }
-        
-        select {
-            padding: 10px;
-            border: 2px solid #e0e6ed;
-            border-radius: 8px;
-            font-size: 1rem;
-            background: white;
-        }
-        
-        select:focus {
-            outline: none;
-            border-color: #4a6cf7;
-        }
-        
-        .commission-table {
-            background: white;
-            border-radius: 15px;
-            overflow: hidden;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-        }
-        
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        
-        th {
-            background: linear-gradient(135deg, #4a6cf7, #2c3e50);
-            color: white;
-            padding: 20px;
-            text-align: left;
-            font-weight: 600;
-        }
-        
-        td {
-            padding: 15px 20px;
-            border-bottom: 1px solid #e0e6ed;
-        }
-        
-        tr:nth-child(even) {
-            background: #f8f9ff;
-        }
-        
-        tr:hover {
-            background: #e8f2ff;
-        }
-        
-        .status-indicator {
-            display: inline-block;
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            margin-left: 10px;
-        }
-        
-        .status-loaded {
-            background: #28a745;
-        }
-        
-        .status-pending {
-            background: #ffc107;
-        }
-        
-        .loading {
-            display: none;
-            text-align: center;
-            padding: 40px;
-        }
-        
-        .spinner {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #4a6cf7;
-            border-radius: 50%;
-            width: 50px;
-            height: 50px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 20px;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        .export-section {
-            padding: 30px;
-            background: #f8f9ff;
-            border-top: 1px solid #e0e6ed;
-            text-align: center;
-        }
-        
-        .export-buttons {
-            display: flex;
-            gap: 15px;
-            justify-content: center;
-            flex-wrap: wrap;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>Dashboard de Comisiones y Ventas</h1>
-            <p>Sistema integral de análisis y cálculo de comisiones</p>
-        </div>
-        
-        <div class="upload-section">
-            <div class="upload-container">
-                <div class="upload-box" id="infoUpload">
-                    <div class="upload-icon">📊</div>
-                    <h3>Archivo INFO_1</h3>
-                    <p>Datos de ventas y activaciones</p>
-                    <input type="file" id="infoFile" accept=".xlsx,.xls">
-                    <span class="status-indicator" id="infoStatus"></span>
-                </div>
-                
-                <div class="upload-box" id="commissionUpload">
-                    <div class="upload-icon">💰</div>
-                    <h3>Archivo Comisiones</h3>
-                    <p>Datos con recargas para cálculo</p>
-                    <input type="file" id="commissionFile" accept=".xlsx,.xls">
-                    <span class="status-indicator" id="commissionStatus"></span>
-                </div>
-            </div>
-            
-            <div style="text-align: center;">
-                <button class="btn" id="processBtn" disabled>Procesar Datos</button>
-            </div>
-        </div>
-        
-        <div class="loading" id="loadingIndicator">
-            <div class="spinner"></div>
-            <p>Procesando datos... Por favor espere</p>
-        </div>
-        
-        <div class="main-content" id="mainContent" style="display: none;">
-            <div class="filters">
-                <div class="filter-group">
-                    <label>Distribuidor:</label>
-                    <select id="distributorFilter">
-                        <option value="">Todos los distribuidores</option>
-                    </select>
-                </div>
-                
-                <div class="filter-group">
-                    <label>Período:</label>
-                    <select id="periodFilter">
-                        <option value="">Todo el período</option>
-                    </select>
-                </div>
-                
-                <div class="filter-group">
-                    <label>Tipo de Venta:</label>
-                    <select id="saleTypeFilter">
-                        <option value="">Todos los tipos</option>
-                        <option value="Portabilidad">Portabilidad</option>
-                        <option value="Linea Nueva">Línea Nueva</option>
-                    </select>
-                </div>
-            </div>
-            
-            <div class="metrics-grid">
-                <div class="metric-card">
-                    <div class="metric-value" id="totalSales">0</div>
-                    <div class="metric-label">Total Ventas</div>
-                </div>
-                
-                <div class="metric-card">
-                    <div class="metric-value" id="totalPortability">0</div>
-                    <div class="metric-label">Portabilidades</div>
-                </div>
-                
-                <div class="metric-card">
-                    <div class="metric-value" id="totalNewLines">0</div>
-                    <div class="metric-label">Líneas Nuevas</div>
-                </div>
-                
-                <div class="metric-card">
-                    <div class="metric-value" id="qualityPercent">0%</div>
-                    <div class="metric-label">Calidad de Ventas</div>
-                </div>
-                
-                <div class="metric-card">
-                    <div class="metric-value" id="totalCommissions">$0</div>
-                    <div class="metric-label">Comisiones Totales</div>
-                </div>
-                
-                <div class="metric-card">
-                    <div class="metric-value" id="activeLines">0</div>
-                    <div class="metric-label">Líneas Activas</div>
-                </div>
-            </div>
-            
-            <div class="charts-grid">
-                <div class="chart-container">
-                    <div class="chart-title">Ventas por Distribuidor</div>
-                    <canvas id="distributorChart"></canvas>
-                </div>
-                
-                <div class="chart-container">
-                    <div class="chart-title">Tipos de Venta</div>
-                    <canvas id="saleTypeChart"></canvas>
-                </div>
-                
-                <div class="chart-container">
-                    <div class="chart-title">Calidad de Ventas por Distribuidor</div>
-                    <canvas id="qualityChart"></canvas>
-                </div>
-                
-                <div class="chart-container">
-                    <div class="chart-title">Tendencia de Ventas Mensual</div>
-                    <canvas id="trendChart"></canvas>
-                </div>
-            </div>
-            
-            <div class="commission-table">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Distribuidor</th>
-                            <th>Total Ventas</th>
-                            <th>Portabilidades</th>
-                            <th>Líneas Nuevas</th>
-                            <th>Con Recarga</th>
-                            <th>Calidad %</th>
-                            <th>Nivel</th>
-                            <th>Comisión Total</th>
-                        </tr>
-                    </thead>
-                    <tbody id="commissionTableBody"></tbody>
-                </table>
-            </div>
-        </div>
-        
-        <div class="export-section">
-            <div class="export-buttons">
-                <button class="btn" onclick="exportToExcel()">📊 Exportar a Excel</button>
-                <button class="btn" onclick="exportToPDF()">📄 Exportar a PDF</button>
-                <button class="btn" onclick="generateReport()">📈 Generar Reporte</button>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        // Variables globales
-        let infoData = [];
-        let commissionData = [];
-        let processedData = {};
-        let charts = {};
-        
-        // Esquema de comisiones
-        const commissionScheme = [
-            { from: 1, to: 29, portabilityBonus: 0, newLineBonus: 0, level: "Nivel 1" },
-            { from: 30, to: 49, portabilityBonus: 40, newLineBonus: 10, level: "Nivel 2" },
-            { from: 50, to: 99, portabilityBonus: 60, newLineBonus: 20, level: "Nivel 3" },
-            { from: 100, to: Infinity, portabilityBonus: 80, newLineBonus: 20, level: "Nivel 4" }
-        ];
-        
-        // Event listeners
-        document.addEventListener('DOMContentLoaded', function() {
-            setupEventListeners();
-        });
-        
-        function setupEventListeners() {
-            // Upload boxes
-            document.getElementById('infoUpload').addEventListener('click', () => {
-                document.getElementById('infoFile').click();
-            });
-            
-            document.getElementById('commissionUpload').addEventListener('click', () => {
-                document.getElementById('commissionFile').click();
-            });
-            
-            // File inputs
-            document.getElementById('infoFile').addEventListener('change', (e) => {
-                handleFileUpload(e, 'info');
-            });
-            
-            document.getElementById('commissionFile').addEventListener('change', (e) => {
-                handleFileUpload(e, 'commission');
-            });
-            
-            // Process button
-            document.getElementById('processBtn').addEventListener('click', processData);
-            
-            // Filters
-            document.getElementById('distributorFilter').addEventListener('change', applyFilters);
-            document.getElementById('periodFilter').addEventListener('change', applyFilters);
-            document.getElementById('saleTypeFilter').addEventListener('change', applyFilters);
-        }
-        
-        async function handleFileUpload(event, type) {
-            const file = event.target.files[0];
-            if (!file) return;
-            
-            const statusElement = document.getElementById(type + 'Status');
-            statusElement.className = 'status-indicator status-pending';
-            
-            try {
-                const data = await readExcelFile(file);
-                
-                if (type === 'info') {
-                    infoData = data;
-                    document.getElementById('infoUpload').classList.add('loaded');
-                } else {
-                    commissionData = data;
-                    document.getElementById('commissionUpload').classList.add('loaded');
-                }
-                
-                statusElement.className = 'status-indicator status-loaded';
-                
-                // Enable process button if both files are loaded
-                if (infoData.length > 0 && commissionData.length > 0) {
-                    document.getElementById('processBtn').disabled = false;
-                }
-                
-            } catch (error) {
-                console.error('Error reading file:', error);
-                alert('Error al leer el archivo. Por favor, verifique que sea un archivo Excel válido.');
-            }
-        }
-        
-        function readExcelFile(file) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    try {
-                        const data = new Uint8Array(e.target.result);
-                        const workbook = XLSX.read(data, { type: 'array' });
-                        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                        const jsonData = XLSX.utils.sheet_to_json(firstSheet);
-                        resolve(jsonData);
-                    } catch (error) {
-                        reject(error);
-                    }
-                };
-                reader.readAsArrayBuffer(file);
-            });
-        }
-        
-        async function processData() {
-            document.getElementById('loadingIndicator').style.display = 'block';
-            
-            try {
-                // Procesar datos
-                processedData = await analyzeData();
-                
-                // Popular filtros
-                populateFilters();
-                
-                // Actualizar métricas
-                updateMetrics();
-                
-                // Crear gráficos
-                createCharts();
-                
-                // Crear tabla de comisiones
-                createCommissionTable();
-                
-                // Mostrar contenido principal
-                document.getElementById('mainContent').style.display = 'block';
-                document.getElementById('loadingIndicator').style.display = 'none';
-                
-            } catch (error) {
-                console.error('Error processing data:', error);
-                alert('Error al procesar los datos. Por favor, revise los archivos.');
-                document.getElementById('loadingIndicator').style.display = 'none';
-            }
-        }
-        
-        async function analyzeData() {
-            // Simular procesamiento
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            
-            const analysis = {
-                distributors: {},
-                periods: new Set(),
-                totalSales: infoData.length,
-                totalCommissions: 0
-            };
-            
-            // Procesar datos de info
-            infoData.forEach(row => {
-                const distributor = row.Distribuidor || 'Sin Distribuidor';
-                const saleType = row['Tipo de Venta'] || 'Sin Tipo';
-                const date = new Date(row['Fecha de activacion']);
-                const month = date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0');
-                
-                analysis.periods.add(month);
-                
-                if (!analysis.distributors[distributor]) {
-                    analysis.distributors[distributor] = {
-                        totalSales: 0,
-                        portability: 0,
-                        newLines: 0,
-                        withRecharge: 0,
-                        totalCommission: 0,
-                        level: '',
-                        months: {}
-                    };
-                }
-                
-                analysis.distributors[distributor].totalSales++;
-                
-                if (saleType === 'Portabilidad') {
-                    analysis.distributors[distributor].portability++;
-                } else if (saleType === 'Linea Nueva') {
-                    analysis.distributors[distributor].newLines++;
-                }
-                
-                if (!analysis.distributors[distributor].months[month]) {
-                    analysis.distributors[distributor].months[month] = 0;
-                }
-                analysis.distributors[distributor].months[month]++;
-            });
-            
-            // Procesar datos de comisiones (simular recargas)
-            Object.keys(analysis.distributors).forEach(distributor => {
-                const data = analysis.distributors[distributor];
-                
-                // Simular recargas (70% tienen recarga)
-                data.withRecharge = Math.floor(data.totalSales * 0.7);
-                
-                // Calcular nivel y comisiones
-                const level = calculateCommissionLevel(data.totalSales);
-                data.level = level.level;
-                
-                // Calcular comisiones solo para líneas con recarga
-                const portabilityWithRecharge = Math.floor(data.portability * 0.7);
-                const newLinesWithRecharge = Math.floor(data.newLines * 0.7);
-                
-                data.totalCommission = 
-                    (portabilityWithRecharge * level.portabilityBonus) + 
-                    (newLinesWithRecharge * level.newLineBonus);
-                
-                analysis.totalCommissions += data.totalCommission;
-            });
-            
-            return analysis;
-        }
-        
-        function calculateCommissionLevel(totalSales) {
-            return commissionScheme.find(scheme => 
-                totalSales >= scheme.from && totalSales <= scheme.to
-            ) || commissionScheme[0];
-        }
-        
-        function populateFilters() {
-            // Distribuidor filter
-            const distributorFilter = document.getElementById('distributorFilter');
-            distributorFilter.innerHTML = '<option value="">Todos los distribuidores</option>';
-            
-            Object.keys(processedData.distributors).forEach(distributor => {
-                const option = document.createElement('option');
-                option.value = distributor;
-                option.textContent = distributor;
-                distributorFilter.appendChild(option);
-            });
-            
-            // Período filter
-            const periodFilter = document.getElementById('periodFilter');
-            periodFilter.innerHTML = '<option value="">Todo el período</option>';
-            
-            Array.from(processedData.periods).sort().forEach(period => {
-                const option = document.createElement('option');
-                option.value = period;
-                option.textContent = period;
-                periodFilter.appendChild(option);
-            });
-        }
-        
-        function updateMetrics() {
-            const data = processedData;
-            
-            // Calcular métricas totales
-            let totalPortability = 0;
-            let totalNewLines = 0;
-            let totalWithRecharge = 0;
-            let totalActive = 0;
-            
-            Object.values(data.distributors).forEach(dist => {
-                totalPortability += dist.portability;
-                totalNewLines += dist.newLines;
-                totalWithRecharge += dist.withRecharge;
-                totalActive += dist.totalSales;
-            });
-            
-            const qualityPercent = totalActive > 0 ? 
-                Math.round((totalWithRecharge / totalActive) * 100) : 0;
-            
-            // Actualizar DOM
-            document.getElementById('totalSales').textContent = data.totalSales.toLocaleString();
-            document.getElementById('totalPortability').textContent = totalPortability.toLocaleString();
-            document.getElementById('totalNewLines').textContent = totalNewLines.toLocaleString();
-            document.getElementById('qualityPercent').textContent = qualityPercent + '%';
-            document.getElementById('totalCommissions').textContent = ' + data.totalCommissions.toLocaleString();
-            document.getElementById('activeLines').textContent = totalActive.toLocaleString();
-        }
-        
-        function createCharts() {
-            // Destruir gráficos existentes
-            Object.values(charts).forEach(chart => {
-                if (chart) chart.destroy();
-            });
-            
-            createDistributorChart();
-            createSaleTypeChart();
-            createQualityChart();
-            createTrendChart();
-        }
-        
-        function createDistributorChart() {
-            const ctx = document.getElementById('distributorChart').getContext('2d');
-            
-            const distributors = Object.keys(processedData.distributors).slice(0, 10);
-            const sales = distributors.map(d => processedData.distributors[d].totalSales);
-            
-            charts.distributorChart = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: distributors.map(d => d.split('-')[0]),
-                    datasets: [{
-                        label: 'Ventas',
-                        data: sales,
-                        backgroundColor: 'rgba(74, 108, 247, 0.8)',
-                        borderColor: 'rgba(74, 108, 247, 1)',
-                        borderWidth: 2
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        legend: {
-                            display: false
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true
-                        }
-                    }
-                }
-            });
-        }
-        
-        function createSaleTypeChart() {
-            const ctx = document.getElementById('saleTypeChart').getContext('2d');
-            
-            let totalPortability = 0;
-            let totalNewLines = 0;
-            
-            Object.values(processedData.distributors).forEach(dist => {
-                totalPortability += dist.portability;
-                totalNewLines += dist.newLines;
-            });
-            
-            charts.saleTypeChart = new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: ['Portabilidad', 'Línea Nueva'],
-                    datasets: [{
-                        data: [totalPortability, totalNewLines],
-                        backgroundColor: [
-                            'rgba(74, 108, 247, 0.8)',
-                            'rgba(44, 62, 80, 0.8)'
-                        ],
-                        borderWidth: 2
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        legend: {
-                            position: 'bottom'
-                        }
-                    }
-                }
-            });
-        }
-        
-        function createQualityChart() {
-            const ctx = document.getElementById('qualityChart').getContext('2d');
-            
-            const distributors = Object.keys(processedData.distributors).slice(0, 8);
-            const quality = distributors.map(d => {
-                const dist = processedData.distributors[d];
-                return dist.totalSales > 0 ? Math.round((dist.withRecharge / dist.totalSales) * 100) : 0;
-            });
-            
-            charts.qualityChart = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: distributors.map(d => d.split('-')[0]),
-                    datasets: [{
-                        label: 'Calidad %',
-                        data: quality,
-                        backgroundColor: quality.map(q => 
-                            q >= 80 ? 'rgba(40, 167, 69, 0.8)' :
-                            q >= 60 ? 'rgba(255, 193, 7, 0.8)' :
-                            'rgba(220, 53, 69, 0.8)'
-                        ),
-                        borderWidth: 2
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        legend: {
-                            display: false
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            max: 100
-                        }
-                    }
-                }
-            });
-        }
-        
-        function createTrendChart() {
-            const ctx = document.getElementById('trendChart').getContext('2d');
-            
-            const periods = Array.from(processedData.periods).sort();
-            const monthlyData = periods.map(period => {
-                let total = 0;
-                Object.values(processedData.distributors).forEach(dist => {
-                    total += dist.months[period] || 0;
-                });
-                return total;
-            });
-            
-            charts.trendChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: periods,
-                    datasets: [{
-                        label: 'Ventas Mensuales',
-                        data: monthlyData,
-                        borderColor: 'rgba(74, 108, 247, 1)',
-                        backgroundColor: 'rgba(74, 108, 247, 0.1)',
-                        borderWidth: 3,
-                        fill: true,
-                        tension: 0.4
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        legend: {
-                            display: false
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true
-                        }
-                    }
-                }
-            });
-        }
-        
-        function createCommissionTable() {
-            const tbody = document.getElementById('commissionTableBody');
-            tbody.innerHTML = '';
-            
-            // Ordenar distribuidores por ventas totales
-            const sortedDistributors = Object.entries(processedData.distributors)
-                .sort((a, b) => b[1].totalSales - a[1].totalSales);
-            
-            sortedDistributors.forEach(([distributor, data]) => {
-                const row = document.createElement('tr');
-                
-                const quality = data.totalSales > 0 ? 
-                    Math.round((data.withRecharge / data.totalSales) * 100) : 0;
-                
-                row.innerHTML = `
-                    <td>${distributor}</td>
-                    <td>${data.totalSales.toLocaleString()}</td>
-                    <td>${data.portability.toLocaleString()}</td>
-                    <td>${data.newLines.toLocaleString()}</td>
-                    <td>${data.withRecharge.toLocaleString()}</td>
-                    <td>${quality}%</td>
-                    <td>${data.level}</td>
-                    <td>${data.totalCommission.toLocaleString()}</td>
-                `;
-                
-                tbody.appendChild(row);
-            });
-        }
-        
-        function applyFilters() {
-            // Implementar filtros aquí
-            const distributorFilter = document.getElementById('distributorFilter').value;
-            const periodFilter = document.getElementById('periodFilter').value;
-            const saleTypeFilter = document.getElementById('saleTypeFilter').value;
-            
-            // Por ahora, solo actualizar la tabla con los filtros
-            updateFilteredTable(distributorFilter, periodFilter, saleTypeFilter);
-        }
-        
-        function updateFilteredTable(distributorFilter, periodFilter, saleTypeFilter) {
-            const tbody = document.getElementById('commissionTableBody');
-            const rows = tbody.querySelectorAll('tr');
-            
-            rows.forEach(row => {
-                const distributorCell = row.cells[0].textContent;
-                let show = true;
-                
-                if (distributorFilter && !distributorCell.includes(distributorFilter)) {
-                    show = false;
-                }
-                
-                row.style.display = show ? '' : 'none';
-            });
-        }
-        
-        // Funciones de exportación
-        function exportToExcel() {
-            const data = [];
-            
-            // Preparar datos para Excel
-            Object.entries(processedData.distributors).forEach(([distributor, dist]) => {
-                const quality = dist.totalSales > 0 ? 
-                    Math.round((dist.withRecharge / dist.totalSales) * 100) : 0;
-                
-                data.push({
-                    'Distribuidor': distributor,
-                    'Total Ventas': dist.totalSales,
-                    'Portabilidades': dist.portability,
-                    'Líneas Nuevas': dist.newLines,
-                    'Con Recarga': dist.withRecharge,
-                    'Calidad %': quality,
-                    'Nivel': dist.level,
-                    'Comisión Total': dist.totalCommission
-                });
-            });
-            
-            const ws = XLSX.utils.json_to_sheet(data);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Reporte Comisiones");
-            
-            const fecha = new Date().toISOString().split('T')[0];
-            XLSX.writeFile(wb, `reporte_comisiones_${fecha}.xlsx`);
-        }
-        
-        function exportToPDF() {
-            window.print();
-        }
-        
-        function generateReport() {
-            alert('Función de reporte personalizado en desarrollo...');
-        }
     </script>
 </body>
 </html>
