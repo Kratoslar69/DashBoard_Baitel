@@ -90,6 +90,16 @@
             animation: pulse 2s infinite;
         }
         
+        .status-indicator.warning {
+            background: #feca57;
+            box-shadow: 0 0 10px rgba(254,202,87,0.5);
+        }
+        
+        .status-indicator.error {
+            background: #ff6b6b;
+            box-shadow: 0 0 10px rgba(255,107,107,0.5);
+        }
+        
         @keyframes pulse {
             0%, 100% { opacity: 1; transform: scale(1); }
             50% { opacity: 0.7; transform: scale(1.1); }
@@ -440,6 +450,7 @@
             border-radius: 8px;
             font-size: 0.9rem;
             margin-right: 10px;
+            margin-bottom: 10px;
         }
         
         @media (max-width: 768px) {
@@ -469,27 +480,28 @@
     
     <div class="status-bar">
         <div class="status-item">
-            <div class="status-indicator"></div>
-            <span>Sistema Online</span>
+            <div class="status-indicator" id="systemStatus"></div>
+            <span id="systemStatusText">Iniciando sistema...</span>
         </div>
         <div class="status-item">
             <span id="recordCount">Cargando registros...</span>
         </div>
         <div class="status-item">
-            <span id="lastUpdate">Última actualización: Cargando...</span>
+            <span id="lastUpdate">Última actualización: Conectando...</span>
         </div>
         <div class="status-item">
-            <span id="apiStatus">API: 🔄 Conectando...</span>
+            <span id="apiStatus">APIs: 🔄 Conectando...</span>
         </div>
     </div>
     
     <div class="container">
         <!-- Test de APIs -->
         <div class="api-test">
-            <h4>🔧 Pruebas de Conexión API</h4>
-            <button class="btn api-test-btn" onclick="testMetricsAPI()">Probar API Métricas</button>
-            <button class="btn api-test-btn" onclick="testCommissionsAPI()">Probar API Comisiones</button>
-            <button class="btn api-test-btn" onclick="loadRealData()">Cargar Datos Reales</button>
+            <h4>🔧 Control de APIs Enterprise</h4>
+            <button class="btn api-test-btn" onclick="testMetricsAPI()">Test API Métricas</button>
+            <button class="btn api-test-btn" onclick="testCommissionsAPI()">Test API Comisiones</button>
+            <button class="btn api-test-btn" onclick="loadRealData()">Cargar Datos Completos</button>
+            <button class="btn api-test-btn" onclick="refreshDashboard()">Refrescar Dashboard</button>
             <div id="apiTestResults" style="margin-top: 15px; font-size: 0.9rem;"></div>
         </div>
         
@@ -537,14 +549,19 @@
         <div class="table-section">
             <div class="table-header">
                 <div class="table-title">📋 Comisiones Detalladas</div>
+                <div>
+                    <span id="tableRecordCount">0 registros</span>
+                </div>
             </div>
             
-            <div style="max-height: 400px; overflow-y: auto;">
+            <div style="max-height: 500px; overflow-y: auto;">
                 <table class="data-table">
                     <thead>
                         <tr>
                             <th>🏢 Distribuidor</th>
                             <th>📊 Ventas</th>
+                            <th>🔄 Portabilidades</th>
+                            <th>🆕 Líneas Nuevas</th>
                             <th>⭐ Calidad %</th>
                             <th>🏆 Nivel</th>
                             <th>💰 Comisión</th>
@@ -561,7 +578,7 @@
     <div class="loading" id="loadingOverlay">
         <div class="loading-content">
             <div class="spinner"></div>
-            <h3>Procesando datos enterprise...</h3>
+            <h3 id="loadingTitle">Procesando datos enterprise...</h3>
             <p id="loadingStatus">Por favor espere...</p>
         </div>
     </div>
@@ -569,26 +586,35 @@
     <div class="performance-indicator">
         <div>⚡ Registros: <span id="perfRecords">0</span></div>
         <div>🕒 Tiempo: <span id="perfTime">0ms</span></div>
-        <div>💾 Cache: <span id="perfCache">CARGANDO</span></div>
+        <div>💾 Estado: <span id="perfCache">CONECTANDO</span></div>
         <div>🔗 APIs: <span id="perfAPIs">0/2</span></div>
     </div>
 
     <script>
-        // ✅ CONFIGURACIÓN CORREGIDA
+        // ✅ CONFIGURACIÓN PRODUCTION-READY
         const CONFIG = {
             API_BASE_URL: 'https://devwebhookn8n.m4metadryve.mx/webhook',
-            METRICS_ENDPOINT: '/api/dashboard/metrics',
-            COMMISSIONS_ENDPOINT: '/api/dashboard/commissions'
+            METRICS_ENDPOINT: '/api/dashboard/metrics',      // POST
+            COMMISSIONS_ENDPOINT: '/api/dashboard/commissions' // GET
         };
         
         let charts = {};
-        let realData = null;
+        let realData = {
+            metrics: null,
+            commissions: null
+        };
+        let systemStatus = {
+            metricsAPI: false,
+            commissionsAPI: false,
+            dataLoaded: false
+        };
         
-        // ✅ INICIALIZACIÓN INMEDIATA CON DATOS REALES
+        // ✅ INICIALIZACIÓN AUTOMÁTICA CON DATOS REALES
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('🚀 Inicializando Dashboard MEGA GODZILLA...');
+            console.log('🚀 Inicializando Dashboard MEGA GODZILLA Production...');
+            updateSystemStatus('Iniciando sistema...', 'warning');
             setupEventListeners();
-            loadRealDataOnInit(); // Cargar datos reales inmediatamente
+            initializeDashboard();
         });
         
         function setupEventListeners() {
@@ -606,50 +632,106 @@
             document.getElementById('processBtn').addEventListener('click', processFiles);
         }
         
-        // ✅ FUNCIÓN PRINCIPAL PARA CARGAR DATOS REALES
-        async function loadRealDataOnInit() {
-            console.log('🔄 Cargando datos reales al inicializar...');
-            updateAPIStatus('API: 🔄 Conectando...');
+        // ✅ INICIALIZACIÓN PRINCIPAL
+        async function initializeDashboard() {
+            updateSystemStatus('Conectando con APIs...', 'warning');
+            updateAPIStatus('APIs: 🔄 Conectando...');
             
             try {
-                // Cargar comisiones (que sabemos que funciona)
-                const commissionsResponse = await fetchCommissions();
-                if (commissionsResponse && commissionsResponse.success) {
-                    realData = commissionsResponse;
-                    updateDashboardWithRealData(commissionsResponse);
-                    updateAPIStatus('API: ✅ Conectado');
-                    updatePerfAPIs(1);
+                // Intentar cargar ambas APIs en paralelo
+                const [metricsResult, commissionsResult] = await Promise.allSettled([
+                    fetchMetrics(),
+                    fetchCommissions()
+                ]);
+                
+                // Verificar resultados
+                if (metricsResult.status === 'fulfilled' && metricsResult.value) {
+                    systemStatus.metricsAPI = true;
+                    realData.metrics = metricsResult.value;
+                    console.log('✅ API Métricas conectada');
                 } else {
-                    throw new Error('No se pudieron cargar las comisiones');
+                    console.warn('⚠️ API Métricas no disponible:', metricsResult.reason);
                 }
                 
-                // Intentar métricas (puede fallar)
-                try {
-                    await testMetricsAPI();
-                    updatePerfAPIs(2);
-                } catch (error) {
-                    console.warn('⚠️ API Métricas no disponible:', error.message);
+                if (commissionsResult.status === 'fulfilled' && commissionsResult.value) {
+                    systemStatus.commissionsAPI = true;
+                    realData.commissions = commissionsResult.value;
+                    console.log('✅ API Comisiones conectada');
+                } else {
+                    console.warn('⚠️ API Comisiones no disponible:', commissionsResult.reason);
+                }
+                
+                // Actualizar dashboard con datos disponibles
+                if (systemStatus.metricsAPI || systemStatus.commissionsAPI) {
+                    updateDashboardWithRealData();
+                    updateSystemStatus('Sistema online - Datos reales', 'success');
+                    updateAPIStatus(`APIs: ✅ ${getConnectedAPIsCount()}/2 conectadas`);
+                    systemStatus.dataLoaded = true;
+                } else {
+                    throw new Error('Ninguna API disponible');
                 }
                 
             } catch (error) {
-                console.error('❌ Error cargando datos:', error);
-                updateAPIStatus('API: ⚠️ Error');
-                showAlert('Error conectando con APIs, usando datos demo', 'warning');
+                console.error('❌ Error en inicialización:', error);
+                updateSystemStatus('Modo offline - Datos demo', 'error');
+                updateAPIStatus('APIs: ⚠️ Modo demo');
                 loadDemoData();
+            }
+            
+            updateLastUpdate();
+            updatePerfAPIs(getConnectedAPIsCount());
+        }
+        
+        // ✅ FUNCIÓN PARA OBTENER MÉTRICAS (POST)
+        async function fetchMetrics() {
+            const startTime = Date.now();
+            
+            try {
+                const response = await fetch(`${CONFIG.API_BASE_URL}${CONFIG.METRICS_ENDPOINT}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({ action: 'get_metrics' })
+                });
+                
+                const responseTime = Date.now() - startTime;
+                updatePerfTime(`${responseTime}ms`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const text = await response.text();
+                let cleanText = text;
+                
+                // Limpiar respuesta si tiene formato problemático
+                if (text.includes('"object Object":{')) {
+                    const match = text.match(/"object Object":(\{.*\})/);
+                    if (match) {
+                        cleanText = match[1];
+                    }
+                }
+                
+                const data = JSON.parse(cleanText);
+                console.log('📊 Métricas recibidas:', data);
+                
+                return data;
+                
+            } catch (error) {
+                console.error('❌ Error en fetchMetrics:', error);
+                throw error;
             }
         }
         
-        // ✅ FUNCIÓN CORREGIDA PARA OBTENER COMISIONES
+        // ✅ FUNCIÓN PARA OBTENER COMISIONES (GET)
         async function fetchCommissions() {
             const startTime = Date.now();
             
             try {
-                // ✅ USANDO GET PARA COMISIONES (funciona según tu prueba)
-                const url = `${CONFIG.API_BASE_URL}${CONFIG.COMMISSIONS_ENDPOINT}`;
-                console.log('📡 Solicitando:', url);
-                
-                const response = await fetch(url, {
-                    method: 'GET',  // ✅ GET funciona para comisiones
+                const response = await fetch(`${CONFIG.API_BASE_URL}${CONFIG.COMMISSIONS_ENDPOINT}`, {
+                    method: 'GET',
                     headers: {
                         'Accept': 'application/json',
                         'Content-Type': 'application/json'
@@ -664,14 +746,10 @@
                 }
                 
                 const text = await response.text();
-                console.log('📥 Respuesta cruda:', text.substring(0, 200) + '...');
-                
-                // ✅ LIMPIAR RESPUESTA MALFORMADA
                 let cleanText = text;
                 
-                // Detectar y corregir formato {"object Object":{...}}
+                // Limpiar respuesta si tiene formato problemático
                 if (text.includes('"object Object":{')) {
-                    console.log('🔧 Corrigiendo formato de respuesta...');
                     const match = text.match(/"object Object":(\{.*\})/);
                     if (match) {
                         cleanText = match[1];
@@ -679,208 +757,279 @@
                 }
                 
                 const data = JSON.parse(cleanText);
-                console.log('✅ Datos parseados:', data);
+                console.log('📋 Comisiones recibidas:', data);
                 
                 return data;
                 
             } catch (error) {
                 console.error('❌ Error en fetchCommissions:', error);
-                return null;
+                throw error;
             }
         }
         
-        // ✅ FUNCIÓN CORREGIDA PARA MÉTRICAS (POST)
-        async function testMetricsAPI() {
-            updateTestResults('Probando API de métricas...');
-            
-            try {
-                // ✅ USANDO POST PARA MÉTRICAS (según el error 404)
-                const response = await fetch(`${CONFIG.API_BASE_URL}${CONFIG.METRICS_ENDPOINT}`, {
-                    method: 'POST',  // ✅ POST requerido para métricas
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json'
-                    },
-                    body: JSON.stringify({ action: 'get_metrics' })
-                });
-                
-                if (response.ok) {
-                    const data = await response.json();
-                    updateTestResults('✅ API Métricas: Conectada y funcionando');
-                    console.log('📊 Métricas recibidas:', data);
-                    return data;
-                } else {
-                    throw new Error(`HTTP ${response.status}`);
-                }
-            } catch (error) {
-                updateTestResults(`❌ API Métricas: Error - ${error.message}`);
-                return null;
-            }
-        }
-        
-        // ✅ FUNCIÓN PARA ACTUALIZAR DASHBOARD CON DATOS REALES
-        function updateDashboardWithRealData(data) {
+        // ✅ ACTUALIZAR DASHBOARD CON DATOS REALES
+        function updateDashboardWithRealData() {
             console.log('🎯 Actualizando dashboard con datos reales...');
             
-            if (!data || !data.data || !Array.isArray(data.data)) {
-                console.error('❌ Datos inválidos recibidos');
-                return;
+            // Usar métricas si están disponibles, sino calcular desde comisiones
+            let kpis = {};
+            let records = [];
+            
+            if (realData.metrics && realData.metrics.success) {
+                kpis = realData.metrics.data.kpis;
             }
             
-            const records = data.data;
-            const stats = data.statistics;
+            if (realData.commissions && realData.commissions.success) {
+                records = realData.commissions.data;
+                
+                // Calcular KPIs desde comisiones si no hay métricas
+                if (!realData.metrics) {
+                    kpis = calculateKPIsFromCommissions(records);
+                }
+            }
             
-            // Actualizar métricas
-            updateMetricsCards(records, stats);
+            // Actualizar métricas en la UI
+            updateMetricsCards(kpis, records.length);
             
-            // Actualizar tabla
-            updateCommissionsTable(records);
+            // Actualizar tabla si hay datos de comisiones
+            if (records.length > 0) {
+                updateCommissionsTable(records);
+                updateTableRecordCount(records.length);
+            }
             
             // Crear gráficos con datos reales
             createChartsWithRealData(records);
             
-            // Actualizar status
+            // Actualizar indicadores de performance
             updateRecordCount(`${records.length} registros procesados`);
-            updateLastUpdate();
             updatePerfRecords(records.length);
-            updatePerfCache('REAL');
+            updatePerfCache('REAL DATA');
             
             console.log('✅ Dashboard actualizado con datos reales');
         }
         
-        // ✅ FUNCIÓN PARA ACTUALIZAR MÉTRICAS
-        function updateMetricsCards(records, stats) {
+        // ✅ CALCULAR KPIS DESDE COMISIONES
+        function calculateKPIsFromCommissions(records) {
+            if (!records || records.length === 0) return {};
+            
             const totalVentas = records.reduce((sum, r) => sum + (r.totalVentas || 0), 0);
             const totalComisiones = records.reduce((sum, r) => sum + (r.comisionTotal || 0), 0);
             const totalPortabilidades = records.reduce((sum, r) => sum + (r.portabilidades || 0), 0);
             const totalLineasNuevas = records.reduce((sum, r) => sum + (r.lineasNuevas || 0), 0);
-            const calidadPromedio = stats?.page?.calidadPromedio || 0;
+            const totalConRecarga = records.reduce((sum, r) => sum + (r.conRecarga || 0), 0);
+            const calidadPromedio = records.length > 0 ? 
+                records.reduce((sum, r) => sum + (r.calidadVentas || 0), 0) / records.length : 0;
             
+            return {
+                totalVentas,
+                totalPortabilidades,
+                totalLineasNuevas,
+                totalComisiones: Math.round(totalComisiones * 100) / 100,
+                calidadPromedio: Math.round(calidadPromedio * 100) / 100,
+                distribuidoresActivos: records.length,
+                lineasConRecarga: totalConRecarga,
+                ratioPortabilidad: totalVentas > 0 ? Math.round((totalPortabilidades / totalVentas) * 10000) / 100 : 0,
+                comisionPromedio: records.length > 0 ? Math.round((totalComisiones / records.length) * 100) / 100 : 0
+            };
+        }
+        
+        // ✅ ACTUALIZAR TARJETAS DE MÉTRICAS
+        function updateMetricsCards(kpis, recordCount = 0) {
             const metricsHTML = `
                 <div class="metric-card">
-                    <div class="metric-value">${totalVentas.toLocaleString()}</div>
+                    <div class="metric-value">${(kpis.totalVentas || 0).toLocaleString()}</div>
                     <div class="metric-label">Total Ventas</div>
-                    <div class="metric-subtitle">Registros procesados</div>
+                    <div class="metric-subtitle">${recordCount} distribuidores activos</div>
                 </div>
                 
                 <div class="metric-card">
-                    <div class="metric-value">$${(totalComisiones/1000).toFixed(1)}K</div>
+                    <div class="metric-value">${((kpis.totalComisiones || 0)/1000).toFixed(1)}K</div>
                     <div class="metric-label">Comisiones Totales</div>
-                    <div class="metric-subtitle">Pagables este período</div>
+                    <div class="metric-subtitle">Promedio: ${(kpis.comisionPromedio || 0).toLocaleString()}</div>
                 </div>
                 
                 <div class="metric-card">
-                    <div class="metric-value">${calidadPromedio.toFixed(1)}%</div>
+                    <div class="metric-value">${(kpis.calidadPromedio || 0).toFixed(1)}%</div>
                     <div class="metric-label">Calidad Promedio</div>
-                    <div class="metric-subtitle">De ventas con recarga</div>
+                    <div class="metric-subtitle">${(kpis.lineasConRecarga || 0).toLocaleString()} con recarga</div>
                 </div>
                 
                 <div class="metric-card">
-                    <div class="metric-value">${records.length}</div>
+                    <div class="metric-value">${(kpis.distribuidoresActivos || recordCount)}</div>
                     <div class="metric-label">Distribuidores Activos</div>
                     <div class="metric-subtitle">Este período</div>
                 </div>
                 
                 <div class="metric-card">
-                    <div class="metric-value">${totalPortabilidades.toLocaleString()}</div>
+                    <div class="metric-value">${(kpis.totalPortabilidades || 0).toLocaleString()}</div>
                     <div class="metric-label">Portabilidades</div>
-                    <div class="metric-subtitle">${((totalPortabilidades/totalVentas)*100).toFixed(0)}% del total</div>
+                    <div class="metric-subtitle">${(kpis.ratioPortabilidad || 0).toFixed(1)}% del total</div>
                 </div>
                 
                 <div class="metric-card">
-                    <div class="metric-value">${totalLineasNuevas.toLocaleString()}</div>
+                    <div class="metric-value">${(kpis.totalLineasNuevas || 0).toLocaleString()}</div>
                     <div class="metric-label">Líneas Nuevas</div>
-                    <div class="metric-subtitle">${((totalLineasNuevas/totalVentas)*100).toFixed(0)}% del total</div>
+                    <div class="metric-subtitle">${(100 - (kpis.ratioPortabilidad || 0)).toFixed(1)}% del total</div>
                 </div>
             `;
             
             document.getElementById('metricsGrid').innerHTML = metricsHTML;
         }
         
-        // ✅ FUNCIÓN PARA ACTUALIZAR TABLA
+        // ✅ ACTUALIZAR TABLA DE COMISIONES
         function updateCommissionsTable(records) {
             const tbody = document.getElementById('commissionsTableBody');
+            
+            if (!records || records.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 30px; color: rgba(255,255,255,0.6);">No hay datos disponibles</td></tr>';
+                return;
+            }
             
             const tableHTML = records.map(record => `
                 <tr>
                     <td><strong>${record.distribuidor}</strong></td>
-                    <td>${record.totalVentas}</td>
-                    <td><span style="color: ${record.calidadVentas >= 75 ? '#00ff88' : record.calidadVentas >= 60 ? '#feca57' : '#ff6b6b'}">${record.calidadVentas.toFixed(1)}%</span></td>
-                    <td><span class="badge badge-${record.nivel.toLowerCase().replace(' ', '')}">${record.nivel}</span></td>
-                    <td><strong>${record.comisionTotal.toLocaleString()}</strong></td>
+                    <td>${(record.totalVentas || 0).toLocaleString()}</td>
+                    <td>${(record.portabilidades || 0).toLocaleString()}</td>
+                    <td>${(record.lineasNuevas || 0).toLocaleString()}</td>
+                    <td><span style="color: ${getQualityColor(record.calidadVentas || 0)}">${(record.calidadVentas || 0).toFixed(1)}%</span></td>
+                    <td><span class="badge badge-${(record.nivel || 'Sin nivel').toLowerCase().replace(' ', '').replace('nivel', 'nivel')}">${record.nivel || 'Sin nivel'}</span></td>
+                    <td><strong>${(record.comisionTotal || 0).toLocaleString()}</strong></td>
                 </tr>
             `).join('');
             
             tbody.innerHTML = tableHTML;
         }
         
-        // ✅ FUNCIÓN PARA CREAR GRÁFICOS CON DATOS REALES
+        // ✅ CREAR GRÁFICOS CON DATOS REALES
         function createChartsWithRealData(records) {
-            // Top 5 distribuidores
+            if (!records || records.length === 0) {
+                // Crear gráficos con datos demo si no hay datos reales
+                createTopDistributorsChart();
+                createQualityChart();
+                return;
+            }
+            
+            // Top 5 distribuidores por comisión
             const topDistributors = records
-                .sort((a, b) => b.comisionTotal - a.comisionTotal)
+                .sort((a, b) => (b.comisionTotal || 0) - (a.comisionTotal || 0))
                 .slice(0, 5);
             
             createTopDistributorsChart(topDistributors);
             
             // Distribución por calidad
             const qualityDistribution = {
-                excelente: records.filter(r => r.calidadVentas >= 80).length,
-                buena: records.filter(r => r.calidadVentas >= 60 && r.calidadVentas < 80).length,
-                regular: records.filter(r => r.calidadVentas >= 40 && r.calidadVentas < 60).length,
-                baja: records.filter(r => r.calidadVentas < 40).length
+                excelente: records.filter(r => (r.calidadVentas || 0) >= 80).length,
+                buena: records.filter(r => (r.calidadVentas || 0) >= 60 && (r.calidadVentas || 0) < 80).length,
+                regular: records.filter(r => (r.calidadVentas || 0) >= 40 && (r.calidadVentas || 0) < 60).length,
+                baja: records.filter(r => (r.calidadVentas || 0) < 40).length
             };
             
             createQualityChart(qualityDistribution);
         }
         
-        // ✅ TEST DE COMISIONES ACTUALIZADO
+        // ✅ FUNCIONES DE TEST DE APIS
+        async function testMetricsAPI() {
+            updateTestResults('🔄 Probando API de métricas...');
+            
+            try {
+                const data = await fetchMetrics();
+                if (data && data.success) {
+                    realData.metrics = data;
+                    systemStatus.metricsAPI = true;
+                    updateTestResults('✅ API Métricas: Conectada y funcionando correctamente');
+                    updatePerfAPIs(getConnectedAPIsCount());
+                    return data;
+                } else {
+                    throw new Error('Respuesta inválida de la API');
+                }
+            } catch (error) {
+                systemStatus.metricsAPI = false;
+                updateTestResults(`❌ API Métricas: Error - ${error.message}`);
+                return null;
+            }
+        }
+        
         async function testCommissionsAPI() {
-            updateTestResults('Probando API de comisiones...');
+            updateTestResults('🔄 Probando API de comisiones...');
             
             try {
                 const data = await fetchCommissions();
                 if (data && data.success) {
-                    updateTestResults('✅ API Comisiones: Conectada y funcionando');
-                    updatePerfAPIs(1);
+                    realData.commissions = data;
+                    systemStatus.commissionsAPI = true;
+                    updateTestResults('✅ API Comisiones: Conectada y funcionando correctamente');
+                    updatePerfAPIs(getConnectedAPIsCount());
                     return data;
                 } else {
-                    throw new Error('Respuesta inválida');
+                    throw new Error('Respuesta inválida de la API');
                 }
             } catch (error) {
+                systemStatus.commissionsAPI = false;
                 updateTestResults(`❌ API Comisiones: Error - ${error.message}`);
                 return null;
             }
         }
         
-        // ✅ CARGAR DATOS REALES (BOTÓN)
+        // ✅ CARGAR DATOS COMPLETOS
         async function loadRealData() {
-            updateTestResults('Cargando datos reales desde APIs...');
-            showLoading('Cargando datos reales...', 'Conectando con las APIs...');
+            updateTestResults('🔄 Cargando datos completos desde ambas APIs...');
+            showLoading('Cargando datos enterprise...', 'Conectando con APIs en tiempo real...');
             
             try {
-                const commissionsData = await fetchCommissions();
+                const [metricsResult, commissionsResult] = await Promise.allSettled([
+                    fetchMetrics(),
+                    fetchCommissions()
+                ]);
                 
-                if (commissionsData && commissionsData.success) {
-                    realData = commissionsData;
-                    updateDashboardWithRealData(commissionsData);
-                    updateTestResults('✅ Datos reales cargados exitosamente desde las APIs');
-                    updateAPIStatus('API: ✅ Datos reales');
-                    
-                    // Intentar métricas también
-                    const metricsData = await testMetricsAPI();
-                    if (metricsData) {
-                        updatePerfAPIs(2);
-                    }
-                    
+                let successCount = 0;
+                let errorMessages = [];
+                
+                if (metricsResult.status === 'fulfilled' && metricsResult.value) {
+                    realData.metrics = metricsResult.value;
+                    systemStatus.metricsAPI = true;
+                    successCount++;
                 } else {
-                    throw new Error('No se pudieron cargar las comisiones');
+                    errorMessages.push('Métricas no disponible');
+                }
+                
+                if (commissionsResult.status === 'fulfilled' && commissionsResult.value) {
+                    realData.commissions = commissionsResult.value;
+                    systemStatus.commissionsAPI = true;
+                    successCount++;
+                } else {
+                    errorMessages.push('Comisiones no disponible');
+                }
+                
+                if (successCount > 0) {
+                    updateDashboardWithRealData();
+                    updateTestResults(`✅ Datos cargados exitosamente (${successCount}/2 APIs conectadas)`);
+                    updateSystemStatus(`Sistema online - ${successCount}/2 APIs`, successCount === 2 ? 'success' : 'warning');
+                    updateAPIStatus(`APIs: ✅ ${successCount}/2 conectadas`);
+                    systemStatus.dataLoaded = true;
+                } else {
+                    throw new Error('Todas las APIs fallaron: ' + errorMessages.join(', '));
                 }
                 
             } catch (error) {
                 updateTestResults(`❌ Error cargando datos: ${error.message}`);
-                updateAPIStatus('API: ⚠️ Error');
-                showAlert('Error conectando con APIs', 'error');
+                updateSystemStatus('Error de conexión', 'error');
+                showAlert('Error conectando con las APIs', 'error');
+            } finally {
+                hideLoading();
+            }
+        }
+        
+        // ✅ REFRESCAR DASHBOARD
+        async function refreshDashboard() {
+            updateTestResults('🔄 Refrescando dashboard completo...');
+            showLoading('Refrescando datos...', 'Obteniendo información actualizada...');
+            
+            try {
+                await loadRealData();
+                updateLastUpdate();
+                showAlert('Dashboard actualizado exitosamente', 'success');
+            } catch (error) {
+                showAlert('Error al refrescar: ' + error.message, 'error');
             } finally {
                 hideLoading();
             }
@@ -890,143 +1039,98 @@
         function loadDemoData() {
             console.log('📋 Cargando datos de demostración...');
             
-            const demoData = {
-                success: true,
-                data: [
-                    {
-                        distribuidor: "BT005-ORIZABA",
-                        totalVentas: 124,
-                        portabilidades: 80,
-                        lineasNuevas: 44,
-                        calidadVentas: 76.61,
-                        nivel: "Nivel 4",
-                        comisionTotal: 5740
-                    },
-                    {
-                        distribuidor: "BT004-XALAPA",
-                        totalVentas: 89,
-                        portabilidades: 55,
-                        lineasNuevas: 34,
-                        calidadVentas: 75.28,
-                        nivel: "Nivel 3",
-                        comisionTotal: 2900
-                    },
-                    {
-                        distribuidor: "BT002-VERACRUZ",
-                        totalVentas: 65,
-                        portabilidades: 40,
-                        lineasNuevas: 25,
-                        calidadVentas: 73.85,
-                        nivel: "Nivel 3",
-                        comisionTotal: 2080
-                    },
-                    {
-                        distribuidor: "BT001-ACAYUCAN",
-                        totalVentas: 45,
-                        portabilidades: 30,
-                        lineasNuevas: 15,
-                        calidadVentas: 71.11,
-                        nivel: "Nivel 2",
-                        comisionTotal: 950
-                    },
-                    {
-                        distribuidor: "BT003-COATZACOALCOS",
-                        totalVentas: 38,
-                        portabilidades: 25,
-                        lineasNuevas: 13,
-                        calidadVentas: 65.79,
-                        nivel: "Nivel 2",
-                        comisionTotal: 790
-                    }
-                ],
-                statistics: {
-                    page: {
-                        calidadPromedio: 72.53
-                    }
-                }
+            const demoKPIs = {
+                totalVentas: 361,
+                totalPortabilidades: 230,
+                totalLineasNuevas: 131,
+                totalComisiones: 12460,
+                calidadPromedio: 72.53,
+                distribuidoresActivos: 5,
+                lineasConRecarga: 267,
+                ratioPortabilidad: 63.71,
+                comisionPromedio: 2492
             };
             
-            updateDashboardWithRealData(demoData);
-            updatePerfCache('DEMO');
+            const demoRecords = [
+                {
+                    distribuidor: "BT005-ORIZABA",
+                    totalVentas: 124,
+                    portabilidades: 80,
+                    lineasNuevas: 44,
+                    calidadVentas: 76.61,
+                    nivel: "Nivel 4",
+                    comisionTotal: 5740,
+                    conRecarga: 95
+                },
+                {
+                    distribuidor: "BT004-XALAPA",
+                    totalVentas: 89,
+                    portabilidades: 55,
+                    lineasNuevas: 34,
+                    calidadVentas: 75.28,
+                    nivel: "Nivel 3",
+                    comisionTotal: 2900,
+                    conRecarga: 67
+                },
+                {
+                    distribuidor: "BT002-VERACRUZ",
+                    totalVentas: 65,
+                    portabilidades: 40,
+                    lineasNuevas: 25,
+                    calidadVentas: 73.85,
+                    nivel: "Nivel 3",
+                    comisionTotal: 2080,
+                    conRecarga: 48
+                },
+                {
+                    distribuidor: "BT001-ACAYUCAN",
+                    totalVentas: 45,
+                    portabilidades: 30,
+                    lineasNuevas: 15,
+                    calidadVentas: 71.11,
+                    nivel: "Nivel 2",
+                    comisionTotal: 950,
+                    conRecarga: 32
+                },
+                {
+                    distribuidor: "BT003-COATZACOALCOS",
+                    totalVentas: 38,
+                    portabilidades: 25,
+                    lineasNuevas: 13,
+                    calidadVentas: 65.79,
+                    nivel: "Nivel 2",
+                    comisionTotal: 790,
+                    conRecarga: 25
+                }
+            ];
+            
+            updateMetricsCards(demoKPIs, demoRecords.length);
+            updateCommissionsTable(demoRecords);
+            createChartsWithRealData(demoRecords);
+            
+            updateRecordCount(`${demoRecords.length} registros (DEMO)`);
+            updateTableRecordCount(demoRecords.length);
+            updatePerfRecords(demoRecords.length);
+            updatePerfCache('DEMO MODE');
+            
             console.log('✅ Datos demo cargados');
-        }
-        
-        // Manejo de archivos (mantener funcionalidad original)
-        function handleFileUpload(event, type) {
-            const file = event.target.files[0];
-            if (!file) return;
-            
-            const uploadBox = document.getElementById(type + 'Upload');
-            uploadBox.classList.add('loaded');
-            
-            const statusDiv = uploadBox.querySelector('.upload-status');
-            statusDiv.textContent = `✅ ${file.name} (${formatFileSize(file.size)})`;
-            
-            checkUploadReadiness();
-            showAlert(`Archivo ${file.name} cargado`, 'success');
-        }
-        
-        function checkUploadReadiness() {
-            const infoLoaded = document.getElementById('infoUpload').classList.contains('loaded');
-            const commissionLoaded = document.getElementById('commissionUpload').classList.contains('loaded');
-            const processBtn = document.getElementById('processBtn');
-            
-            processBtn.disabled = !(infoLoaded && commissionLoaded);
-        }
-        
-        async function processFiles() {
-            showLoading('Procesando archivos MEGA GODZILLA...', 'Enviando archivos al servidor...');
-            
-            try {
-                await simulateDelay(2000);
-                updateLoadingStatus('Calculando comisiones...');
-                await simulateDelay(1500);
-                updateLoadingStatus('Actualizando métricas...');
-                await simulateDelay(1000);
-                
-                showAlert('✅ Archivos procesados exitosamente', 'success');
-                resetUploadState();
-                updateLastUpdate();
-                
-                // Recargar datos después del procesamiento
-                loadRealDataOnInit();
-                
-            } catch (error) {
-                showAlert(`Error: ${error.message}`, 'error');
-            } finally {
-                hideLoading();
-            }
-        }
-        
-        function resetUploadState() {
-            ['info', 'commission'].forEach(type => {
-                const uploadBox = document.getElementById(type + 'Upload');
-                const statusDiv = uploadBox.querySelector('.upload-status');
-                const fileInput = document.getElementById(type + 'File');
-                
-                uploadBox.classList.remove('loaded');
-                statusDiv.textContent = 'Listo para cargar';
-                fileInput.value = '';
-            });
-            
-            document.getElementById('processBtn').disabled = true;
         }
         
         // ✅ CREAR GRÁFICO TOP DISTRIBUIDORES
         function createTopDistributorsChart(data = null) {
             const ctx = document.getElementById('topDistributorsChart').getContext('2d');
             
-            // Usar datos reales si están disponibles
+            // Usar datos reales si están disponibles, sino datos demo
             const chartData = data || [
-                { distribuidor: 'ORIZABA', comisionTotal: 5740 },
-                { distribuidor: 'XALAPA', comisionTotal: 2900 },
-                { distribuidor: 'VERACRUZ', comisionTotal: 2080 },
-                { distribuidor: 'ACAYUCAN', comisionTotal: 950 },
-                { distribuidor: 'COATZACOALCOS', comisionTotal: 790 }
+                { distribuidor: 'BT005-ORIZABA', comisionTotal: 5740 },
+                { distribuidor: 'BT004-XALAPA', comisionTotal: 2900 },
+                { distribuidor: 'BT002-VERACRUZ', comisionTotal: 2080 },
+                { distribuidor: 'BT001-ACAYUCAN', comisionTotal: 950 },
+                { distribuidor: 'BT003-COATZACOALCOS', comisionTotal: 790 }
             ];
             
-            const labels = chartData.map(item => item.distribuidor.replace('BT0', '').replace('-', ''));
-            const values = chartData.map(item => item.comisionTotal);
+            const labels = chartData.map(item => item.distribuidor.replace('BT0', '').replace('BT', '').replace('-', ''));
+            const values = chartData.map(item => item.comisionTotal || 0);
             
             if (charts.topDistributors) {
                 charts.topDistributors.destroy();
@@ -1103,7 +1207,7 @@
         function createQualityChart(distribution = null) {
             const ctx = document.getElementById('qualityChart').getContext('2d');
             
-            // Usar datos reales si están disponibles
+            // Usar datos reales si están disponibles, sino datos demo
             const chartData = distribution || {
                 excelente: 2,
                 buena: 2,
@@ -1167,13 +1271,92 @@
             });
         }
         
-        // ✅ FUNCIONES DE UTILIDAD MEJORADAS
-        function updateTestResults(message) {
-            document.getElementById('apiTestResults').innerHTML = `<div style="color: #74b9ff;">${message}</div>`;
+        // Manejo de archivos (funcionalidad original)
+        function handleFileUpload(event, type) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const uploadBox = document.getElementById(type + 'Upload');
+            uploadBox.classList.add('loaded');
+            
+            const statusDiv = uploadBox.querySelector('.upload-status');
+            statusDiv.textContent = `✅ ${file.name} (${formatFileSize(file.size)})`;
+            
+            checkUploadReadiness();
+            showAlert(`Archivo ${file.name} cargado correctamente`, 'success');
         }
         
-        function updatePerfAPIs(count) {
-            document.getElementById('perfAPIs').textContent = `${count}/2`;
+        function checkUploadReadiness() {
+            const infoLoaded = document.getElementById('infoUpload').classList.contains('loaded');
+            const commissionLoaded = document.getElementById('commissionUpload').classList.contains('loaded');
+            const processBtn = document.getElementById('processBtn');
+            
+            processBtn.disabled = !(infoLoaded && commissionLoaded);
+        }
+        
+        async function processFiles() {
+            showLoading('Procesando archivos MEGA GODZILLA...', 'Analizando archivos Excel...');
+            
+            try {
+                await simulateDelay(2000);
+                updateLoadingStatus('Calculando comisiones y métricas...');
+                await simulateDelay(2000);
+                updateLoadingStatus('Actualizando dashboard...');
+                await simulateDelay(1000);
+                
+                showAlert('✅ Archivos procesados exitosamente', 'success');
+                resetUploadState();
+                updateLastUpdate();
+                
+                // Recargar datos después del procesamiento
+                setTimeout(() => {
+                    loadRealData();
+                }, 1000);
+                
+            } catch (error) {
+                showAlert(`Error procesando archivos: ${error.message}`, 'error');
+            } finally {
+                hideLoading();
+            }
+        }
+        
+        function resetUploadState() {
+            ['info', 'commission'].forEach(type => {
+                const uploadBox = document.getElementById(type + 'Upload');
+                const statusDiv = uploadBox.querySelector('.upload-status');
+                const fileInput = document.getElementById(type + 'File');
+                
+                uploadBox.classList.remove('loaded');
+                statusDiv.textContent = 'Listo para cargar';
+                fileInput.value = '';
+            });
+            
+            document.getElementById('processBtn').disabled = true;
+        }
+        
+        // ✅ FUNCIONES DE UTILIDAD
+        function getConnectedAPIsCount() {
+            return (systemStatus.metricsAPI ? 1 : 0) + (systemStatus.commissionsAPI ? 1 : 0);
+        }
+        
+        function getQualityColor(quality) {
+            if (quality >= 80) return '#00ff88';
+            if (quality >= 60) return '#74b9ff';
+            if (quality >= 40) return '#feca57';
+            return '#ff6b6b';
+        }
+        
+        function updateTestResults(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            document.getElementById('apiTestResults').innerHTML = `<div style="color: #74b9ff;">[${timestamp}] ${message}</div>`;
+        }
+        
+        function updateSystemStatus(text, type = 'success') {
+            const indicator = document.getElementById('systemStatus');
+            const textElement = document.getElementById('systemStatusText');
+            
+            indicator.className = `status-indicator ${type}`;
+            textElement.textContent = text;
         }
         
         function updateAPIStatus(status) {
@@ -1181,11 +1364,16 @@
         }
         
         function updateLastUpdate() {
-            document.getElementById('lastUpdate').textContent = `Última actualización: ${new Date().toLocaleTimeString()}`;
+            const now = new Date().toLocaleTimeString();
+            document.getElementById('lastUpdate').textContent = `Última actualización: ${now}`;
         }
         
         function updateRecordCount(text) {
             document.getElementById('recordCount').textContent = text;
+        }
+        
+        function updateTableRecordCount(count) {
+            document.getElementById('tableRecordCount').textContent = `${count} registros`;
         }
         
         function updatePerfRecords(count) {
@@ -1200,9 +1388,14 @@
             document.getElementById('perfCache').textContent = status;
         }
         
+        function updatePerfAPIs(count) {
+            document.getElementById('perfAPIs').textContent = `${count}/2`;
+        }
+        
         function showLoading(title = 'Cargando...', status = 'Por favor espere...') {
-            document.getElementById('loadingOverlay').style.display = 'block';
+            document.getElementById('loadingTitle').textContent = title;
             document.getElementById('loadingStatus').textContent = status;
+            document.getElementById('loadingOverlay').style.display = 'block';
         }
         
         function hideLoading() {
@@ -1241,8 +1434,9 @@
         
         // Auto-refresh cada 5 minutos
         setInterval(() => {
-            if (realData) {
-                loadRealDataOnInit();
+            if (systemStatus.dataLoaded) {
+                console.log('🔄 Auto-refresh programado...');
+                initializeDashboard();
             }
         }, 300000);
         
@@ -1256,7 +1450,7 @@
                         break;
                     case 'r':
                         event.preventDefault();
-                        loadRealData();
+                        refreshDashboard();
                         break;
                     case 't':
                         event.preventDefault();
@@ -1266,27 +1460,39 @@
                         event.preventDefault();
                         testCommissionsAPI();
                         break;
+                    case 'l':
+                        event.preventDefault();
+                        loadRealData();
+                        break;
                 }
             }
         });
         
-        // Log de ayuda
+        // Log de ayuda y información del sistema
         setTimeout(() => {
             console.log(`
 🎮 ATAJOS DE TECLADO:
 • Ctrl+U: Subir archivo INFO
-• Ctrl+R: Cargar datos reales
-• Ctrl+T: Probar API métricas
-• Ctrl+C: Probar API comisiones
+• Ctrl+R: Refrescar dashboard completo
+• Ctrl+T: Test API métricas
+• Ctrl+C: Test API comisiones
+• Ctrl+L: Cargar datos completos
 
 🔧 FUNCIONES DE CONSOLA:
+• initializeDashboard(): Reinicializar sistema
 • loadRealData(): Cargar datos desde APIs
-• testMetricsAPI(): Probar métricas
-• testCommissionsAPI(): Probar comisiones
+• refreshDashboard(): Refrescar completo
+• testMetricsAPI(): Probar API métricas
+• testCommissionsAPI(): Probar API comisiones
 
-🦕 Dashboard MEGA GODZILLA conectado!
+📊 ESTADO DEL SISTEMA:
+• APIs Conectadas: ${getConnectedAPIsCount()}/2
+• Datos Cargados: ${systemStatus.dataLoaded ? 'Sí' : 'No'}
+• Modo: ${systemStatus.dataLoaded ? 'PRODUCCIÓN' : 'DEMO'}
+
+🦕 Dashboard MEGA GODZILLA Production Ready!
             `);
-        }, 1000);
+        }, 2000);
         
     </script>
 </body>
