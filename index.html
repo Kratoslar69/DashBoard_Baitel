@@ -759,3 +759,150 @@
                         borderRadius: 8,
                         borderSkipped: false,
                     }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            titleColor: '#74b9ff',
+                            bodyColor: '#ffffff',
+                            borderColor: '#74b9ff',
+                            borderWidth: 1,
+                            callbacks: {
+                                label: function(context) {
+                                    return `Comisión: ${context.parsed.y.toLocaleString()}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                            ticks: { color: '#ffffff' }
+                        },
+                        y: {
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                            ticks: { 
+                                color: '#ffffff',
+                                callback: function(value) {
+                                    return ' + value.toLocaleString();
+                                }
+                            }
+                        }
+                    },
+                    animation: {
+                        duration: 2000,
+                        easing: 'easeOutBounce'
+                    }
+                }
+            });
+        }
+        
+        function createQualityChart() {
+            const ctx = document.getElementById('qualityChart').getContext('2d');
+            
+            charts.quality = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Excelente (80%+)', 'Buena (60-79%)', 'Regular (40-59%)', 'Baja (<40%)'],
+                    datasets: [{
+                        data: [2, 2, 1, 0],
+                        backgroundColor: [
+                            'rgba(0, 255, 136, 0.8)',
+                            'rgba(116, 185, 255, 0.8)',
+                            'rgba(255, 203, 7, 0.8)',
+                            'rgba(255, 107, 107, 0.8)'
+                        ],
+                        borderColor: [
+                            'rgba(0, 255, 136, 1)',
+                            'rgba(116, 185, 255, 1)',
+                            'rgba(255, 203, 7, 1)',
+                            'rgba(255, 107, 107, 1)'
+                        ],
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { 
+                                color: '#ffffff',
+                                padding: 20,
+                                usePointStyle: true
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            titleColor: '#74b9ff',
+                            bodyColor: '#ffffff',
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.label}: ${context.parsed} distribuidores`;
+                                }
+                            }
+                        }
+                    },
+                    animation: {
+                        duration: 2000,
+                        easing: 'easeInOutCubic'
+                    }
+                }
+            });
+        }
+        
+        function updateLastUpdate() {
+            document.getElementById('lastUpdate').textContent = `Última actualización: ${new Date().toLocaleTimeString()}`;
+        }
+        
+        function showAlert(message, type = 'success') {
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert ${type}`;
+            alertDiv.textContent = message;
+            document.body.appendChild(alertDiv);
+            
+            setTimeout(() => alertDiv.classList.add('show'), 100);
+            
+            setTimeout(() => {
+                alertDiv.classList.remove('show');
+                setTimeout(() => alertDiv.remove(), 300);
+            }, 4000);
+        }
+        
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
+        // Auto-refresh de timestamp
+        setInterval(updateLastUpdate, 60000);
+        
+        // Log de ayuda
+        setTimeout(() => {
+            console.log(`
+🎮 DASHBOARD DEMO MODE:
+• Sistema funcionando sin APIs
+• Datos de demostración cargados
+• Upload de archivos funcional
+• Gráficos interactivos
+
+🔧 PARA CONECTAR APIs REALES:
+1. Configura HTTPS en tu servidor n8n
+2. Actualiza las URLs en el código
+3. Verifica CORS
+
+🦕 Dashboard MEGA GODZILLA Demo listo!
+            `);
+        }, 1000);
+        
+    </script>
+</body>
+</html>
